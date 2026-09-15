@@ -43,6 +43,11 @@
 #ifdef Opposite
 #undef Opposite
 #endif
+// X11, sigh. Xlib.h arrives through vulkan.h on Linux and defines None as 0L, which breaks
+// every enumerator named None in code downstream of this header - undo it at the source.
+#ifdef None
+#undef None
+#endif
 
 namespace PPSSPP_VK {
 #if !PPSSPP_PLATFORM(IOS_APP_STORE)

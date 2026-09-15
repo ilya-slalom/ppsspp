@@ -286,11 +286,13 @@ bool TestSlangZipPathSanitizer() {
 }
 
 bool TestSlangPackageExtract() {
-	Path tmp = Path(g_Config.memStickDirectory).empty() ? Path("/tmp") : Path("/tmp");
+	// zip_open(ZIP_CREATE) does not create the parent directory, and on Windows "/tmp" resolves to
+	// C:\tmp, which normally doesn't exist - so make the test's own directory before writing the zip.
+	Path tmp("/tmp/slang_pkg_test");
+	File::DeleteDirRecursively(tmp);
+	EXPECT_TRUE(File::CreateFullPath(tmp));
 	Path zipPath = tmp / "slang_test_pkg.zip";
 	Path dest = tmp / "slang_extract_dest";
-	File::DeleteDirRecursively(dest);
-	File::Delete(zipPath);
 
 	// --- create the test zip ---
 	int zerr = 0;
@@ -323,8 +325,7 @@ bool TestSlangPackageExtract() {
 	EXPECT_TRUE(url == "http://example/test.zip");
 	EXPECT_EQ_INT(r.root().getInt("fileCount", -1), 2);
 
-	File::DeleteDirRecursively(dest);
-	File::Delete(zipPath);
+	File::DeleteDirRecursively(tmp);
 	return true;
 }
 

@@ -75,6 +75,20 @@ jobs:
           echo "#define PPSSPP_WIN_VERSION_NO_UPDATE 1" >> Windows/win-version.h
         }
         
+    # librashader is dlopen'd at runtime, so it has to be built and shipped next to the exe or slang
+    # shaders silently do nothing. The cache key covers the pinned tag, which lives in the script.
+    - name: Cache librashader
+      id: librashader
+      uses: actions/cache@v6.1.0
+      with:
+        path: build-librashader
+        key: librashader-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('scripts/build-librashader.ps1') }}
+
+    - name: Build librashader
+      if: steps.librashader.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: scripts/build-librashader.ps1 -Platform ${{ matrix.platform }}
+
     - name: Build Windows
       working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: msbuild /m /p:TrackFileAccess=false /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ matrix.platform }} Windows/PPSSPP.sln
@@ -87,6 +101,7 @@ jobs:
         cp *.pdb ppsspp/
         cp Windows/*.bat ppsspp/
         cp -r assets ppsspp/assets
+        cp build-librashader/librashader.dll ppsspp/
 
     - name: Package headless (non-Win32)
       if: matrix.platform != 'Win32'
@@ -361,6 +376,26 @@ jobs:
       if: matrix.id != 'macos'
       with:
         key: ${{ matrix.id }}
+
+    # librashader is dlopen'd at runtime, so it has to be built and shipped inside the .app bundle or
+    # slang shaders silently do nothing. Only the macOS entry produces a release asset here; the Linux
+    # one is packaged by appimage.yml. The cache key covers the pinned tag, which lives in the script.
+    - name: Cache librashader
+      if: matrix.id == 'macos'
+      id: librashader
+      uses: actions/cache@v6.1.0
+      with:
+        path: build-librashader
+        key: librashader-${{ matrix.id }}-${{ runner.arch }}-${{ hashFiles('scripts/build-librashader.sh') }}
+
+    - name: Build librashader
+      if: matrix.id == 'macos' && steps.librashader.outputs.cache-hit != 'true'
+      run: scripts/build-librashader.sh
+
+    - name: Point the macOS build at librashader
+      if: matrix.id == 'macos'
+      # b.sh passes $CMAKE_ARGS through to cmake, which copies this next to the binary post-build.
+      run: echo "CMAKE_ARGS=-DLIBRASHADER_PREBUILT=$PWD/build-librashader/librashader.dylib" >> $GITHUB_ENV
 
     - name: Execute build
       env:

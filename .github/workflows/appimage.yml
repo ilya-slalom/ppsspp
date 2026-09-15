@@ -136,6 +136,30 @@ jobs:
             chmod +x ./get-debloated-pkgs.sh
             ./get-debloated-pkgs.sh --add-mesa libxml2-mini opus-mini llvm-libs-nano
 
+      # librashader is dlopen'd at runtime, so it has to be built and shipped inside the AppImage or
+      # slang shaders silently do nothing. The cache key covers the pinned tag, which lives in the script.
+      - name: Cache librashader
+        id: librashader
+        uses: actions/cache@v6.1.0
+        with:
+          path: build-librashader
+          key: librashader-${{ matrix.id }}-${{ hashFiles('scripts/build-librashader.sh') }}
+
+      - name: Install Rust for librashader
+        if: steps.librashader.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          # rustup rather than Arch's rust package: that one pulls in the full llvm-libs, which would
+          # undo the llvm-libs-nano debloat above and bloat the mesa libraries sharun bundles.
+          pacman -S --noconfirm rustup
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build librashader
+        if: steps.librashader.outputs.cache-hit != 'true'
+        shell: bash
+        run: scripts/build-librashader.sh
+
       - name: Build Release
         id: version
         env:
@@ -165,7 +189,7 @@ jobs:
           #./b.sh --release --no-sdl2 --no-png
           mkdir -p build
           pushd build
-          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_SYSTEM_LIBPNG=OFF -DUSE_SYSTEM_FFMPEG=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache .. 
+          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_SYSTEM_LIBPNG=OFF -DUSE_SYSTEM_FFMPEG=OFF -DLIBRASHADER_PREBUILT="$GITHUB_WORKSPACE/build-librashader/librashader.so" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ..
           make -j$(nproc)
           popd
           ccache -s -v
